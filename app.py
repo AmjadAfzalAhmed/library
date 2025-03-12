@@ -199,13 +199,6 @@ def main():
 
     # Sidebar with animated menu
     with st.sidebar:
-        st.markdown("""
-            <div class="text-center mb-8">
-                <div class="text-2xl font-bold text-purple-600 mb-2">🚀 Navigation</div>
-                <div class="h-1 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full"></div>
-            </div>
-        """, unsafe_allow_html=True)
-        
         menu = ["📖 Add a Book", "❌ Remove a Book", "🔍 Search for a Book", 
                 "📚 Display All Books", "📊 Advanced Statistics", "📗 Recommend a Book"]
         choice = st.radio   ("Choose an action", menu, index=0, 
