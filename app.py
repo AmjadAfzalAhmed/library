@@ -29,14 +29,13 @@ def inject_custom_resources():
         box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
     }
     
-    .pulse {
-        animation: pulse 2s infinite;
+    .header {
+        animation: glowingExpand 1.5s ease-out;
     }
-    
-    @keyframes pulse {
-        0% { transform: scale(0.95); }
-        50% { transform: scale(1.05); }
-        100% { transform: scale(0.95); }
+
+    @keyframes glowingExpand {
+        0% { transform: scale(1); }
+        100% { transform: scale(1.1); }
     }
 
     .book-card.glow::before {
@@ -88,6 +87,17 @@ def get_db_connection():
         yield conn
     finally:
         conn.close()
+
+# Animated Header 
+st.markdown("""
+    <div class="text-center p-6" style="position: relative;">
+        <h1 class="header text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+            📚 Personal Library Manager 
+        </h1>
+        <div class="absolute top-0 left-0 w-full h-full" id="particle-canvas"></div>
+    </div>
+""", unsafe_allow_html=True)
+
 
 class Book:
     def __init__(self, title, author, publication_year, genre, read_status):
