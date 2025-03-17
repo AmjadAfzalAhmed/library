@@ -21,6 +21,7 @@ def inject_custom_resources():
         margin: 1rem 0;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         border-left: 5px solid #4CAF50;
+        color: dodgerblue !important;
     }
     
     .book-card:hover {
