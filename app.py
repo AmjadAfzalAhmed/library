@@ -1,7 +1,8 @@
 import streamlit as st
-import json
+import sqlite3
 import random
 import plotly.express as px
+from contextlib import contextmanager
 from streamlit.components.v1 import html
 
 # Custom CSS and JavaScript injections
@@ -11,7 +12,6 @@ def inject_custom_resources():
     * { 
         font-family: 'Orbitron', sans-serif;
         transition: all 0.3s ease-in-out;
-
     }
     
     .book-card {
@@ -39,18 +39,6 @@ def inject_custom_resources():
         100% { transform: scale(0.95); }
     }
 
-    .book-card {
-        position: relative; /* Ensure the pseudo-element is positioned relative to the card */
-        background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
-        border-radius: 15px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        border-left: 5px solid #4CAF50;
-        overflow: hidden; /* Helps to clip the pseudo-element if needed */
-    }
-
-  /* Glowing effect applied to elements with both .book-card and .glow */
     .book-card.glow::before {
         content: '';
         position: absolute;
@@ -67,15 +55,9 @@ def inject_custom_resources():
     }
 
     @keyframes glow {
-        0% {
-            background-position: 0% 50%;
-        }
-        50% {
-            background-position: 100% 50%;
-        }
-        100% {
-            background-position: 0% 50%;
-        }
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
     }
     
     .stats-card {
@@ -92,22 +74,20 @@ def inject_custom_resources():
     }
     
     </style>    
-    
     """, unsafe_allow_html=True)
     
     st.markdown('<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&display=swap" rel="stylesheet">', unsafe_allow_html=True)
 
 inject_custom_resources()
 
-# Animated Header with Particle Effect
-st.markdown("""
-    <div class="text-center p-6" style="position: relative;">
-        <h1 class="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 pulse">
-            📚 Personal Library Manager
-        </h1>
-        <div class="absolute top-0 left-0 w-full h-full" id="particle-canvas"></div>
-    </div>
-""", unsafe_allow_html=True)
+# Database setup
+@contextmanager
+def get_db_connection():
+    conn = sqlite3.connect('library.db')
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 class Book:
     def __init__(self, title, author, publication_year, genre, read_status):
@@ -130,80 +110,88 @@ class Book:
                 <p>👤 {self.author}</p>
                 <p>📅 {self.publication_year} | 🎭 {self.genre}</p>
             </div>
-            
-        </div>
         </div>
         """
 
-# ... (keep all imports and CSS injections the same)
-
 class Library:
     def __init__(self):
-        self.books = []
+        self.create_table()
+
+    def create_table(self):
+        with get_db_connection() as conn:
+            conn.execute('''CREATE TABLE IF NOT EXISTS books
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          title TEXT NOT NULL,
+                          author TEXT NOT NULL,
+                          publication_year INTEGER,
+                          genre TEXT,
+                          read_status BOOLEAN)''')
 
     def add_book(self, book):
-        self.books.append(book)
+        with get_db_connection() as conn:
+            conn.execute('''INSERT INTO books 
+                         (title, author, publication_year, genre, read_status)
+                         VALUES (?, ?, ?, ?, ?)''',
+                         (book.title, book.author, book.publication_year, 
+                          book.genre, book.read_status))
+            conn.commit()
 
     def remove_book(self, title):
-        self.books = [book for book in self.books if book.title != title]
+        with get_db_connection() as conn:
+            conn.execute("DELETE FROM books WHERE title = ?", (title,))
+            conn.commit()
 
     def search_books(self, search_by, query):
-        if search_by == "title":
-            return [book for book in self.books if query.lower() in book.title.lower()]
-        elif search_by == "author":
-            return [book for book in self.books if query.lower() in book.author.lower()]
-        return []
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            if search_by == "title":
+                cursor.execute("SELECT * FROM books WHERE LOWER(title) LIKE ?", 
+                             ('%' + query.lower() + '%',))
+            elif search_by == "author":
+                cursor.execute("SELECT * FROM books WHERE LOWER(author) LIKE ?", 
+                             ('%' + query.lower() + '%',))
+            return [Book(*row[1:]) for row in cursor.fetchall()]
 
     def display_books(self):
-        return self.books  
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM books")
+            return [Book(*row[1:]) for row in cursor.fetchall()]
 
     def display_statistics(self):
-        total_books = len(self.books)
-        read_books = sum(1 for book in self.books if book.read_status)
-        percentage_read = (read_books / total_books) * 100 if total_books > 0 else 0
-        return total_books, percentage_read
-
-    def save_to_file(self, filename):
-        with open(filename, "w") as file:
-            json.dump([book.__dict__ for book in self.books], file)
-
-    def load_from_file(self, filename):
-        try:
-            with open(filename, "r") as file:
-                data = json.load(file)
-                self.books = [Book(**book) for book in data]
-        except FileNotFoundError:
-            self.books = []
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM books")
+            total_books = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM books WHERE read_status = 1")
+            read_books = cursor.fetchone()[0]
+            
+            percentage_read = (read_books / total_books) * 100 if total_books > 0 else 0
+            return total_books, percentage_read
 
 class EnhancedLibrary(Library):
     def genre_distribution(self):
-        genres = [book.genre for book in self.books]
-        return {genre: genres.count(genre) for genre in set(genres)}
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT genre, COUNT(*) FROM books GROUP BY genre")
+            return {row[0]: row[1] for row in cursor.fetchall()}
     
     def publication_timeline(self):
-        years = [book.publication_year for book in self.books]
-        return {year: years.count(year) for year in set(years)}
-
-
-class EnhancedLibrary(Library):
-    def genre_distribution(self):
-        genres = [book.genre for book in self.books]
-        return {genre: genres.count(genre) for genre in set(genres)}
-    
-    def publication_timeline(self):
-        years = [book.publication_year for book in self.books]
-        return {year: years.count(year) for year in set(years)}
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT publication_year, COUNT(*) FROM books GROUP BY publication_year")
+            return {row[0]: row[1] for row in cursor.fetchall()}
 
 def main():
     library = EnhancedLibrary()
-    library.load_from_file("library.txt")
 
     # Sidebar with animated menu
     with st.sidebar:
         menu = ["📖 Add a Book", "❌ Remove a Book", "🔍 Search for a Book", 
                 "📚 Display All Books", "📊 Advanced Statistics", "📗 Recommend a Book"]
-        choice = st.radio   ("Choose an action", menu, index=0, 
-                            help="Select an option from the menu", key="menu_select")
+        choice = st.radio("Choose an action", menu, index=0, 
+                        help="Select an option from the menu", key="menu_select")
 
     if choice == "📖 Add a Book":
         with st.form(key="add_book_form"):
@@ -262,9 +250,10 @@ def main():
 
     elif choice == "📚 Display All Books":
         st.markdown("### 📚 Your Personal Library")
-        if library.books:
+        books = library.display_books()
+        if books:
             cols = st.columns(3)
-            for idx, book in enumerate(library.books):
+            for idx, book in enumerate(books):
                 with cols[idx % 3]:
                     st.markdown(book.card_html(idx), unsafe_allow_html=True)
         else:
@@ -305,7 +294,7 @@ def main():
 
     elif choice == "📗 Recommend a Book":
         st.markdown("### 🎯 Your Next Read")
-        unread = [book for book in library.books if not book.read_status]
+        unread = [book for book in library.display_books() if not book.read_status]
         if unread:
             if st.button("✨ Generate Recommendation"):
                 book = random.choice(unread)
@@ -321,8 +310,6 @@ def main():
                 """, unsafe_allow_html=True)
         else:
             st.info("🎉 Congratulations! You've read all books in your library!")
-
-    library.save_to_file("library.txt")
 
 if __name__ == "__main__":
     main()

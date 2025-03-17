@@ -1,1 +1,0 @@
-[{"title": "Python Learning", "author": "Amjad", "publication_year": 2024, "genre": "Other", "read_status": false}, {"title": "Typescript", "author": "Afzal", "publication_year": 2024, "genre": "Other", "read_status": false}, {"title": "Superman", "author": "Ahmed", "publication_year": 2024, "genre": "Fiction", "read_status": false}]
